@@ -3,7 +3,11 @@ package abbott
 import "core:fmt"
 import "core:strings"
 
-foreign import mpv "system:libmpv.so.2"
+when ODIN_OS == .Windows {
+    foreign import mpv ".build/windows/mpv/mpv.lib"
+} else {
+    foreign import mpv "system:libmpv.so.2"
+}
 
 foreign mpv {
     mpv_create :: proc() -> rawptr ---

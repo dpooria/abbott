@@ -2,3 +2,7 @@
 /abbott.bin
 /core
 /.build/
+
+/abbott.exe
+/abbott.pdb
+/dist/

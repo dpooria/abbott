@@ -471,13 +471,22 @@ activate :: proc "c" (app: ^gtk.Application, _: rawptr) {
 
 main :: proc() {
     app_context = context
-    config := os.get_env("XDG_CONFIG_HOME", context.allocator)
-    if config == "" {config = fmt.aprintf("%s/.config", os.get_env("HOME", context.allocator))}
-    folder := fmt.aprintf("%s/abbott", config)
-    os.mkdir_all(folder)
-    state_path = fmt.aprintf("%s/library.json", folder)
+    folder, legacy_folder: string
+    when ODIN_OS == .Windows {
+        executable_dir, err := os.get_executable_directory(context.temp_allocator)
+        if err != nil {fmt.eprintln("Could not find the executable directory"); return}
+        folder, _ = filepath.join({executable_dir, "data"}, context.temp_allocator)
+    } else {
+        config := string(glib.get_user_config_dir())
+        folder, _ = filepath.join({config, "abbott"}, context.temp_allocator)
+        legacy_folder, _ = filepath.join({config, "abot"}, context.temp_allocator)
+    }
+    if os.mkdir_all(folder) != nil {fmt.eprintln("Could not create the library directory"); return}
+    state_path, _ = filepath.join({folder, "library.json"}, context.allocator)
     load_path := state_path
-    if !os.exists(state_path) {load_path = fmt.aprintf("%s/abot/library.json", config)}
+    if !os.exists(state_path) && legacy_folder != "" {
+        load_path, _ = filepath.join({legacy_folder, "library.json"}, context.temp_allocator)
+    }
     if data, err := os.read_entire_file(load_path, context.allocator); err == nil {
         defer delete(data)
         if json.unmarshal(data, &lib) !=

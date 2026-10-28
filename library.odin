@@ -73,7 +73,7 @@ import_book :: proc(lib: ^Library, path: string) {
     } else {
         collect_audio(path, &book.files)
         slice.sort(book.files[:])
-        book.title = strings.clone(filepath.base(strings.trim_right(path, "/")))
+        book.title = strings.clone(filepath.base(strings.trim_right(path, "/\\")))
     }
     if len(book.files) == 0 {delete(book.title); status = "No supported audio files found"; return}
     for existing in lib.books {
@@ -99,7 +99,7 @@ collect_audio :: proc(path: string, files: ^[dynamic]string) {
     for {
         name := glib.dir_read_name(dir)
         if name == nil {break}
-        file := fmt.aprintf("%s/%s", path, name)
+        file, _ := filepath.join({path, string(name)}, context.allocator)
         defer delete(file)
         if glib.file_test(cstr(file), .IS_SYMLINK) {continue}
         if glib.file_test(

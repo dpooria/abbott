@@ -1,6 +1,6 @@
 # abbott
 
-A simple audiobook player for Linux, written in Odin with GTK4 and mpv.
+A simple audiobook player written in Odin with GTK4 and mpv.
 
 * Automatic progress saving and resume
 * Embedded chapters with search and chapter-local timing
@@ -18,6 +18,19 @@ git submodule update --init --recursive
 ```
 
 When cloning, use `git clone --recurse-submodules <repository-url>` to include [odin-gtk](https://github.com/PucklaJ/odin-gtk).
+
+## Windows portable (preview)
+
+Run **Windows portable** from GitHub Actions and download its ZIP artifact. Extract the whole ZIP into a writable folder and open `abbott.exe`. Progress is stored in `data/library.json` beside the executable.
+
+To build on Windows, install Odin, Visual Studio C++ Build Tools with the Windows SDK, and 7-Zip, then run:
+
+```powershell
+git submodule update --init --recursive
+powershell -ExecutionPolicy Bypass -File .\build-windows.ps1
+```
+
+The script downloads the GTK and libmpv runtimes and creates `dist/abbott-windows-x64.zip`. Windows playback and desktop integration still need testing.
 
 ## Usage
 
