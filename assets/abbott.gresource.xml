@@ -1,0 +1,5 @@
+<gresources>
+  <gresource prefix="/io/abbott/icons/scalable/apps">
+    <file alias="io.abbott.Player.svg">judy.svg</file>
+  </gresource>
+</gresources>

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Abbott
+Comment=A simple audiobook player
+Exec=abbott %F
+Icon=io.abbott.Player
+Terminal=false
+Categories=AudioVideo;Audio;Player;
+Keywords=audiobook;books;listen;mpv;
+StartupNotify=true
+MimeType=audio/mpeg;audio/mp4;audio/ogg;audio/flac;audio/x-wav;
