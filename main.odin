@@ -43,6 +43,7 @@ text_label :: proc(text: string) -> ^gtk.Widget {
     gtk.label_set_ellipsize(gtk.LABEL(widget), .ELLIPSIZE_END)
     return widget
 }
+
 margin :: proc(widget: ^gtk.Widget, amount: i32) {
     gtk.widget_set_margin_top(widget, amount)
     gtk.widget_set_margin_bottom(widget, amount)
@@ -75,7 +76,7 @@ scroll_list :: proc(list: ^gtk.ListBox) -> ^gtk.Widget {
 
 clear_list :: proc(list: ^gtk.ListBox) {
     for {
-        child := gtk.widget_get_first_child(gtk.WIDGET(list))
+        child := gtk.WIDGET(gtk.list_box_get_row_at_index(list, 0))
         if child == nil {break}
         gtk.list_box_remove(list, child)
     }
@@ -391,6 +392,7 @@ activate :: proc "c" (app: ^gtk.Application, _: rawptr) {
     gtk.box_append(gtk.BOX(sidebar), text_label("Library"))
     library_list = gtk.LIST_BOX(gtk.list_box_new())
     gtk.list_box_set_activate_on_single_click(library_list, true)
+    setup_book_menu()
     gtk.box_append(gtk.BOX(sidebar), scroll_list(library_list))
     gtk.box_append(gtk.BOX(sidebar), judy_picture())
     gtk.box_append(gtk.BOX(sidebar), text_label("Drop audio files or folders here"))

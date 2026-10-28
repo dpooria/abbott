@@ -4,6 +4,7 @@ import "core:encoding/json"
 import "core:fmt"
 import "core:os"
 import "core:testing"
+import "core:strings"
 import "core:time"
 
 @(test)
@@ -137,3 +138,23 @@ long_book_seeking :: proc(t: ^testing.T) {
     testing.expect(t, number(player, "time-pos") > 0 && number(player, "time-pos") < 2)
 }
 
+
+@(test)
+library_removal :: proc(t: ^testing.T) {
+    library := Library{selected = 2}
+    for i in 0 ..< 3 {
+        book := Book{title = fmt.aprintf("Book %d", i), position = f64(i * 10)}
+        append(&book.files, strings.clone("/audio/book.mp3"))
+        append(&book.bookmarks, Bookmark{0, 5})
+        append(&library.books, book)
+    }
+    remove_book(&library, 0)
+    testing.expect(t, len(library.books) == 2 && library.selected == 1)
+    testing.expect(t, library.books[0].title == "Book 1" && library.books[1].position == 20)
+    remove_book(&library, 1)
+    testing.expect(t, library.selected == -1 && len(library.books) == 1)
+    testing.expect(t, len(library.books[0].bookmarks) == 1)
+    remove_book(&library, 0)
+    testing.expect(t, len(library.books) == 0)
+    delete(library.books)
+}

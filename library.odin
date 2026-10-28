@@ -109,3 +109,14 @@ collect_audio :: proc(path: string, files: ^[dynamic]string) {
     }
 }
 
+
+remove_book :: proc(lib: ^Library, index: int) {
+    book := lib.books[index]
+    delete(book.title)
+    for file in book.files {delete(file)}
+    delete(book.files)
+    delete(book.bookmarks)
+    ordered_remove(&lib.books, index)
+    if lib.selected == index {lib.selected = -1}
+    else if lib.selected > index {lib.selected -= 1}
+}
