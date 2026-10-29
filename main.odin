@@ -11,7 +11,9 @@ import rl "vendor:raylib"
 lib := Library {
     selected = -1,
     speed    = 1,
+    volume   = 100,
 }
+
 p: rawptr
 active := -1
 pending: bool
@@ -25,7 +27,9 @@ saved_at: i64
 
 clock_start := time.tick_now()
 
-monotonic_time :: proc() -> i64 {return i64(time.tick_since(clock_start)) / 1000}
+monotonic_time :: proc() -> i64 {
+    return i64(time.tick_since(clock_start)) / 1000
+}
 
 load_book :: proc(autoplay := true) {
     book := &lib.books[active]
@@ -53,12 +57,20 @@ playback_position :: proc() -> f64 {
     return lib.books[active].position
 }
 
+apply_volume :: proc() {
+    set_number(p, "volume", lib.volume)
+    mpv_set_property_string(p, "mute", "yes" if lib.muted else "no")
+}
+
 on_control :: proc(action: int) {
     if active < 0 || pending {return}
     book := &lib.books[active]
     switch action {
     case 1:
-        if flag(p, "eof-reached") {queue_seek(0); paused = true}
+        if flag(p, "eof-reached") {
+            queue_seek(0)
+            paused = true
+        }
         paused = !paused
         mpv_set_property_string(p, "pause", "yes" if paused else "no")
     case 2:
@@ -76,18 +88,27 @@ on_control :: proc(action: int) {
     case 7:
         sleep_at = 0 if sleep_at > 0 else monotonic_time() + 1800 * 1000000
     case 8:
-        append(&book.bookmarks, Bookmark{book.track, book.position}); status = "Bookmark saved"
+        added := toggle_bookmark(book, playback_position())
+        status = "Bookmark saved" if added else "Bookmark removed"
         save(&lib)
+    case 9:
+        bookmarks_open = true
+        bookmark_scroll = 0
     case 10, 11:
-        index, _, _ := chapter_bounds(chapters[:], book.position, book.duration)
+        index, _, _ := chapter_bounds(chapters[:], playback_position(), book.duration)
         index = clamp(index + (-1 if action == 10 else 1), 0, len(chapters) - 1)
         if index >= 0 {queue_seek(chapters[index].start)}
-    case 9:
-        if len(book.bookmarks) > 0 {
-            mark := book.bookmarks[len(book.bookmarks) - 1]
-            book.track = mark.track; book.position = mark.position; load_book()
-        }
+    case 12:
+        lib.muted = !lib.muted
+        apply_volume()
+        save(&lib)
     }
+}
+
+jump_to_bookmark :: proc(mark: Bookmark) {
+    book := &lib.books[active]
+    if mark.track == book.track {queue_seek(mark.position)}
+    else {book.track = mark.track; book.position = mark.position; load_book(!paused)}
 }
 
 tick :: proc() {
@@ -124,14 +145,19 @@ tick :: proc() {
         }
         if event.id == 7 && event.data != nil {
             end := cast(^[2]i32)event.data
-            if end[0] ==
-               4 {status = "Playback failed. Check that the file is available."; pending = true}
+            if end[0] == 4 {
+                status = "Playback failed. Check that the file is available."
+                pending = true
+            }
         }
     }
     now := monotonic_time()
     if seek_target >= 0 && seek_position < 0 && now >= seek_after && !pending {
-        if seek_to(p, seek_target, lib.books[active].duration) {seek_position = seek_target}
-        else {status = "Could not seek"}
+        if seek_to(
+            p,
+            seek_target,
+            lib.books[active].duration,
+        ) {seek_position = seek_target} else {status = "Could not seek"}
         seek_target = -1
     }
     if sleep_at > 0 && now >= sleep_at {
@@ -147,17 +173,20 @@ tick :: proc() {
         mpv_get_property(p, "pause", 3, &pause_flag)
         mpv_get_property(p, "eof-reached", 3, &eof)
         paused = pause_flag != 0 || eof != 0
-        if seeking || seek_position >= 0 ||
+        if seeking ||
+           seek_position >= 0 ||
            seek_target >=
                0 {status = "Seeking…"} else if flag(p, "paused-for-cache") {status = "Buffering…"} else if eof != 0 {status = "Finished"} else if paused {status = "Paused"} else {status = "Playing"}
-        if eof != 0 && seek_target < 0 && seek_position < 0 &&
+        if eof != 0 &&
+           seek_target < 0 &&
+           seek_position < 0 &&
            book.track + 1 < len(book.files) {book.track += 1; book.position = 0; load_book()}
     }
     if now - saved_at >= 5 * 1000000 {save(&lib); saved_at = now}
 }
 
 main :: proc() {
-    folder, legacy_folder: string
+    folder: string
     when ODIN_OS == .Windows {
         executable_dir, err := os.get_executable_directory(context.temp_allocator)
         if err != nil {fmt.eprintln("Could not find the executable directory"); return}
@@ -165,7 +194,6 @@ main :: proc() {
     } else {
         config, _ := os.user_config_dir(context.temp_allocator)
         folder, _ = filepath.join({config, "abbott"}, context.temp_allocator)
-        legacy_folder, _ = filepath.join({config, "abot"}, context.temp_allocator)
     }
     if !os.exists(folder) {
         if os.mkdir_all(folder) != nil {
@@ -174,16 +202,13 @@ main :: proc() {
         }
     }
     state_path, _ = filepath.join({folder, "library.json"}, context.allocator)
-    load_path := state_path
-    if !os.exists(state_path) && legacy_folder != "" {
-        load_path, _ = filepath.join({legacy_folder, "library.json"}, context.temp_allocator)
-    }
-    if data, err := os.read_entire_file(load_path, context.allocator); err == nil {
+    if data, err := os.read_entire_file(state_path, context.allocator); err == nil {
         defer delete(data)
         if json.unmarshal(data, &lib) !=
            nil {fmt.eprintln("Could not read library; keeping existing file."); return}
     }
     if lib.speed <= 0 {lib.speed = 1}
+    lib.volume = clamp(lib.volume, 0, 100)
     for arg in os.args[1:] {import_book(&lib, arg)}
     p = mpv_create()
     if p == nil {fmt.eprintln("Could not create mpv"); return}
@@ -193,6 +218,7 @@ main :: proc() {
     mpv_set_option_string(p, "idle", "yes")
     mpv_set_option_string(p, "keep-open", "yes")
     if mpv_initialize(p) < 0 {fmt.eprintln("Could not initialize mpv"); return}
+    apply_volume()
     rl.SetConfigFlags({.WINDOW_RESIZABLE, .VSYNC_HINT})
     rl.InitWindow(1000, 680, "abbott")
     if !rl.IsWindowReady() {fmt.eprintln("Could not open the player window"); return}
@@ -204,7 +230,35 @@ main :: proc() {
     codepoints: [dynamic]rune
     for codepoint in rune(32) ..< rune(0x530) {append(&codepoints, codepoint)}
     for codepoint in rune(0x2000) ..< rune(0x2070) {append(&codepoints, codepoint)}
-    for codepoint in ([?]rune{0xf00d, 0xf017, 0xf02e, 0xf048, 0xf049, 0xf04b, 0xf04c, 0xf050, 0xf051, 0xf061, 0xf062, 0xf067, 0xf07b, 0xf07c, 0xf0a8, 0xf0e4, 0xf104, 0xf105, 0xf12d, 0xf15b, 0xf185, 0xf186, 0xf1f8}) {append(&codepoints, codepoint)}
+    for codepoint in ([?]rune {
+            0xf00d,
+            0xf017,
+            0xf026,
+            0xf028,
+            0xf02e,
+            0xf03a,
+            0xf048,
+            0xf049,
+            0xf04b,
+            0xf04c,
+            0xf050,
+            0xf051,
+            0xf061,
+            0xf062,
+            0xf067,
+            0xf07b,
+            0xf07c,
+            0xf097,
+            0xf0a8,
+            0xf0e4,
+            0xf104,
+            0xf105,
+            0xf12d,
+            0xf15b,
+            0xf185,
+            0xf186,
+            0xf1f8,
+        }) {append(&codepoints, codepoint)}
     ui_font = rl.LoadFontFromMemory(
         ".ttf",
         raw_data(font_data),

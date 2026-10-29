@@ -62,9 +62,10 @@ embedded_chapters_and_seek :: proc(t: ^testing.T) {
 @(test)
 legacy_library :: proc(t: ^testing.T) {
     data := `{"books":[],"selected":-1,"light":true,"speed":1.25}`
-    restored: Library
+    restored := Library{volume = 100}
     testing.expect(t, json.unmarshal(transmute([]byte)data, &restored) == nil)
     testing.expect(t, restored.selected == -1 && restored.speed == 1.25)
+    testing.expect(t, restored.volume == 100 && !restored.muted)
     delete(restored.books)
 }
 
@@ -214,4 +215,36 @@ seek_progress_stays_at_target :: proc(t: ^testing.T) {
         }
         testing.expect(t, finished)
     }
+}
+
+@(test)
+volume_preferences :: proc(t: ^testing.T) {
+    for volume in ([3]f64{0, 42, 100}) {
+        original := Library{volume = volume, muted = true}
+        data, err := json.marshal(original)
+        testing.expect(t, err == nil)
+        restored := Library{volume = 100}
+        testing.expect(t, json.unmarshal(data, &restored) == nil)
+        testing.expect(t, restored.volume == volume && restored.muted)
+        delete(data)
+        delete(restored.books)
+    }
+}
+
+@(test)
+bookmark_toggle :: proc(t: ^testing.T) {
+    book: Book
+    defer delete(book.bookmarks)
+    testing.expect(t, toggle_bookmark(&book, 30))
+    testing.expect(t, !toggle_bookmark(&book, 30.5))
+    testing.expect(t, len(book.bookmarks) == 0)
+    testing.expect(t, toggle_bookmark(&book, 30))
+    testing.expect(t, toggle_bookmark(&book, 60))
+    testing.expect(t, len(book.bookmarks) == 2)
+    book.track = 1
+    testing.expect(t, bookmark_at(&book, 30) == -1)
+    testing.expect(t, toggle_bookmark(&book, 30))
+    testing.expect(t, len(book.bookmarks) == 3)
+    testing.expect(t, !toggle_bookmark(&book, 31))
+    testing.expect(t, len(book.bookmarks) == 2 && book.bookmarks[0].track == 0)
 }

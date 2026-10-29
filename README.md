@@ -5,7 +5,7 @@ A simple audiobook player based on mpv.
 * Automatic progress saving and resume
 * Embedded chapters with search and chapter-local timing
 * Multi-file books with automatic continuation
-* Playback speed, bookmarks, and a sleep timer
+* Playback speed, volume and mute, bookmarks, and a sleep timer
 
 ## Build
 
@@ -49,3 +49,5 @@ ABBOTT_LONG_AUDIO="/path/to/long-book.mp3" ./test-playback.sh
 ```
 
 Inspired by [Voice](https://github.com/PaulWoitaschek/Voice) and [Cozy](https://github.com/geigi/cozy).
+
+Press **B** within two playback seconds of a saved position to remove that bookmark. The bookmark-list button shows saved positions across all files, with controls to jump to or delete each one. Small clickable arrows above the progress bar mark bookmarks in the current chapter.

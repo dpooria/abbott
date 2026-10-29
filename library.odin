@@ -26,6 +26,8 @@ Library :: struct {
     selected: int,
     speed:    f64,
     light:    bool,
+    volume:   f64,
+    muted:    bool,
 }
 
 Chapter :: struct {
@@ -114,3 +116,17 @@ remove_book :: proc(lib: ^Library, index: int) {
     if lib.selected == index {lib.selected = -1} else if lib.selected > index {lib.selected -= 1}
 }
 
+
+bookmark_at :: proc(book: ^Book, position: f64) -> int {
+    for mark, i in book.bookmarks {
+        if mark.track == book.track && abs(mark.position - position) <= 2 {return i}
+    }
+    return -1
+}
+
+toggle_bookmark :: proc(book: ^Book, position: f64) -> bool {
+    index := bookmark_at(book, position)
+    if index >= 0 {ordered_remove(&book.bookmarks, index); return false}
+    append(&book.bookmarks, Bookmark{book.track, position})
+    return true
+}
