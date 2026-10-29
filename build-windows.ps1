@@ -2,25 +2,9 @@ $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 
 $build = Join-Path $PSScriptRoot '.build/windows'
-$gtk = Join-Path $build 'gtk'
 $mpv = Join-Path $build 'mpv'
-$portable = Join-Path $PSScriptRoot 'dist/abbott-windows-x64'
-$gtkUrl = 'https://github.com/wingtk/gvsbuild/releases/download/2026.4.1/GTK4_Gvsbuild_2026.4.1_x64.zip'
-$mpvUrl = 'https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20261021/mpv-dev-x86_64-20261021-git-e471496c56.7z'
-New-Item -ItemType Directory -Force $build | Out-Null
-
-if (!(Test-Path "$gtk/bin/glib-compile-resources.exe")) {
-    Invoke-WebRequest $gtkUrl -OutFile "$build/gtk.zip"
-    Expand-Archive "$build/gtk.zip" -DestinationPath $gtk -Force
-}
-if (!(Test-Path "$mpv/libmpv.dll.a")) {
-    $sevenZip = (Get-Command 7z -ErrorAction SilentlyContinue).Source
-    if (!$sevenZip) { $sevenZip = "$env:ProgramFiles/7-Zip/7z.exe" }
-    if (!(Test-Path $sevenZip)) { throw 'Install 7-Zip, then run this script again.' }
-    Invoke-WebRequest $mpvUrl -OutFile "$build/mpv.7z"
-    & $sevenZip x -y "-o$mpv" "$build/mpv.7z" | Out-Null
-    if ($LASTEXITCODE) { throw 'Could not extract libmpv.' }
-}
+$output = Join-Path $PSScriptRoot 'dist/windows'
+New-Item -ItemType Directory -Force $mpv | Out-Null
 
 $vswhere = "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe"
 if (!(Test-Path $vswhere)) { throw 'Install Visual Studio C++ Build Tools with the Windows SDK.' }
@@ -38,36 +22,25 @@ $exports = Select-String -Path mpv.odin -Pattern '^\s+(mpv_\w+) :: proc' |
 & $libTool.FullName "/def:$mpv/mpv.def" /machine:x64 "/out:$mpv/mpv.lib" /nologo
 if ($LASTEXITCODE) { throw 'Could not create the libmpv import library.' }
 
-& "$gtk/bin/glib-compile-resources.exe" assets/abbott.gresource.xml --sourcedir=assets --target=.build/abbott.gresource
-if ($LASTEXITCODE) { throw 'Resource compilation failed.' }
-New-Item -ItemType Directory -Force $portable | Out-Null
-& odin build . -target:windows_amd64 "-out:$portable/abbott.exe" '-extra-linker-flags:/subsystem:windows'
+New-Item -ItemType Directory -Force $output | Out-Null
+& odin build . -target:windows_amd64 "-out:$output/abbott.exe" '-extra-linker-flags:/subsystem:windows'
 if ($LASTEXITCODE) { throw 'Odin build failed.' }
 
-Copy-Item "$gtk/bin/*.dll" $portable -Force
-Copy-Item "$mpv/libmpv-2.dll" $portable -Force
-Copy-Item "$($crt.FullName)/*.dll" $portable -Force
-foreach ($folder in 'share', 'etc') {
-    Copy-Item "$gtk/$folder" $portable -Recurse -Force
-}
-New-Item -ItemType Directory -Force "$portable/lib" | Out-Null
-Copy-Item "$gtk/lib/gdk-pixbuf-2.0" "$portable/lib" -Recurse -Force
-if (Test-Path "$gtk/lib/gio") { Copy-Item "$gtk/lib/gio" "$portable/lib" -Recurse -Force }
-Copy-Item LICENSE "$portable/LICENSE" -Force
+Copy-Item "$($crt.FullName)/*.dll" $output -Force
+Copy-Item LICENSE "$output/LICENSE" -Force
+Copy-Item assets/JetBrainsMono-OFL.txt "$output/JetBrainsMono-OFL.txt" -Force
+Copy-Item assets/raylib-LICENSE.txt "$output/raylib-LICENSE.txt" -Force
+Copy-Item assets/raygui-LICENSE.txt "$output/raygui-LICENSE.txt" -Force
 @'
-Abbott for Windows x64 (preview)
+Abbott for Windows x64
 
-Extract the entire ZIP into a writable folder and open abbott.exe.
-Keep all DLLs and runtime folders beside it. No installation is needed.
+Open abbott.exe from this folder.
+Install 64-bit libmpv separately. Put libmpv-2.dll and its dependencies on PATH
+or beside abbott.exe. The mpv.exe command alone is not sufficient.
 Your library and progress are saved in data/library.json beside abbott.exe.
 Audio files stay in their original locations.
 
-Build sources and dependency versions:
-GTK: https://github.com/wingtk/gvsbuild/releases/tag/2026.4.1
-libmpv: https://github.com/shinchiro/mpv-winbuild-cmake/releases/tag/20261021
-mpv: https://github.com/mpv-player/mpv/tree/e471496c56
-'@ | Set-Content "$portable/README.txt" -Encoding UTF8
+raylib and raygui are bundled with Odin.
+'@ | Set-Content "$output/README.txt" -Encoding UTF8
 
-$archive = Join-Path $PSScriptRoot 'dist/abbott-windows-x64.zip'
-Compress-Archive -Path $portable -DestinationPath $archive -Force
-Write-Host "Portable build: $archive"
+Write-Host "Windows build: $output"

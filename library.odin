@@ -6,7 +6,6 @@ import "core:os"
 import "core:path/filepath"
 import "core:slice"
 import "core:strings"
-import "odin-gtk/glib"
 
 Bookmark :: struct {
     track:    int,
@@ -26,6 +25,7 @@ Library :: struct {
     books:    [dynamic]Book,
     selected: int,
     speed:    f64,
+    light:    bool,
 }
 
 Chapter :: struct {
@@ -66,7 +66,7 @@ import_book :: proc(lib: ^Library, path: string) {
     path, err := filepath.abs(path, context.temp_allocator)
     if err != nil {status = "Could not resolve audiobook path"; return}
     book: Book
-    if glib.file_test(cstr(path), .IS_REGULAR) {
+    if os.is_file(path) {
         if !audio_file(path) {status = "Choose an audio file or folder"; return}
         append(&book.files, strings.clone(path))
         book.title = strings.clone(filepath.stem(path))
@@ -93,22 +93,16 @@ clock_text :: proc(seconds: f64) -> string {
 }
 
 collect_audio :: proc(path: string, files: ^[dynamic]string) {
-    dir := glib.dir_open(cstr(path), 0, nil)
-    if dir == nil {return}
-    defer glib.dir_close(dir)
-    for {
-        name := glib.dir_read_name(dir)
-        if name == nil {break}
-        file, _ := filepath.join({path, string(name)}, context.allocator)
-        defer delete(file)
-        if glib.file_test(cstr(file), .IS_SYMLINK) {continue}
-        if glib.file_test(
-            cstr(file),
-            .IS_DIR,
-        ) {collect_audio(file, files)} else if audio_file(file) {append(files, strings.clone(file))}
+    entries, err := os.read_all_directory_by_path(path, context.allocator)
+    if err != nil {return}
+    defer os.file_info_slice_delete(entries, context.allocator)
+    for entry in entries {
+        if entry.type == .Symlink {continue}
+        file, _ := filepath.join({path, entry.name}, context.temp_allocator)
+        if entry.type ==
+           .Directory {collect_audio(file, files)} else if audio_file(file) {append(files, strings.clone(file))}
     }
 }
-
 
 remove_book :: proc(lib: ^Library, index: int) {
     book := lib.books[index]
@@ -117,6 +111,6 @@ remove_book :: proc(lib: ^Library, index: int) {
     delete(book.files)
     delete(book.bookmarks)
     ordered_remove(&lib.books, index)
-    if lib.selected == index {lib.selected = -1}
-    else if lib.selected > index {lib.selected -= 1}
+    if lib.selected == index {lib.selected = -1} else if lib.selected > index {lib.selected -= 1}
 }
+

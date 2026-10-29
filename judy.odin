@@ -1,40 +1,5 @@
 package abbott
 
-import pixbuf "odin-gtk/gdk-pixbuf"
-import "odin-gtk/glib"
-import "odin-gtk/glib/gio"
-import gobj "odin-gtk/glib/gobject"
-import "odin-gtk/gtk"
-
-judy_picture :: proc() -> ^gtk.Widget {
-    svg :: #load("assets/judy.svg")
-    loader := pixbuf.pixbuf_loader_new()
-    defer gobj.object_unref(loader)
-    if !pixbuf.pixbuf_loader_write(loader, cast(^u8)raw_data(svg), u64(len(svg)), nil) {
-        pixbuf.pixbuf_loader_close(loader, nil)
-        return gtk.image_new_from_icon_name("accessories-dictionary-symbolic")
-    }
-    pixbuf.pixbuf_loader_close(loader, nil)
-    image := gtk.image_new_from_pixbuf(pixbuf.pixbuf_loader_get_pixbuf(loader))
-    gtk.image_set_pixel_size(gtk.IMAGE(image), 120)
-    gtk.widget_set_halign(image, .START)
-    gtk.widget_set_tooltip_text(image, "A little nod to Judy Abbott and Daddy-Long-Legs.")
-    return image
-}
-
-register_judy_icon :: proc() {
-    data :: #load(".build/abbott.gresource")
-    bytes := glib.bytes_new_static(raw_data(data), u64(len(data)))
-    defer glib.bytes_unref(bytes)
-    resource := gio.resource_new_from_data(bytes, nil)
-    if resource == nil {return}
-    gio.resources_register(resource)
-    gio.resource_unref(resource)
-    theme := gtk.icon_theme_get_for_display(gtk.gdk_display_get_default())
-    gtk.icon_theme_add_resource_path(theme, "/io/abbott/icons")
-}
-
-
 judy_quotes := [?]string {
     "Most people don’t live; they just race.",
     "It isn’t the great big pleasures that count the most; it’s making a great deal out of the little ones",

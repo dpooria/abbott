@@ -3,8 +3,8 @@ package abbott
 import "core:encoding/json"
 import "core:fmt"
 import "core:os"
-import "core:testing"
 import "core:strings"
+import "core:testing"
 import "core:time"
 
 @(test)
@@ -141,9 +141,14 @@ long_book_seeking :: proc(t: ^testing.T) {
 
 @(test)
 library_removal :: proc(t: ^testing.T) {
-    library := Library{selected = 2}
+    library := Library {
+        selected = 2,
+    }
     for i in 0 ..< 3 {
-        book := Book{title = fmt.aprintf("Book %d", i), position = f64(i * 10)}
+        book := Book {
+            title    = fmt.aprintf("Book %d", i),
+            position = f64(i * 10),
+        }
         append(&book.files, strings.clone("/audio/book.mp3"))
         append(&book.bookmarks, Bookmark{0, 5})
         append(&library.books, book)
@@ -157,4 +162,56 @@ library_removal :: proc(t: ^testing.T) {
     remove_book(&library, 0)
     testing.expect(t, len(library.books) == 0)
     delete(library.books)
+}
+
+@(test)
+recursive_audio_collection :: proc(t: ^testing.T) {
+    folder := os.get_env("ABBOTT_TEST_LIBRARY", context.allocator)
+    defer delete(folder)
+    if folder == "" {return}
+    files: [dynamic]string
+    defer delete(files)
+    defer for file in files {delete(file)}
+    collect_audio(folder, &files)
+    testing.expect(t, len(files) == 2)
+    for file in files {testing.expect(t, audio_file(file))}
+}
+
+
+@(test)
+seek_progress_stays_at_target :: proc(t: ^testing.T) {
+    fixture := os.get_env("ABBOTT_TEST_AUDIO", context.allocator)
+    defer delete(fixture)
+    if fixture == "" {return}
+    p = mpv_create()
+    defer mpv_terminate_destroy(p)
+    mpv_set_option_string(p, "ao", "null")
+    mpv_set_option_string(p, "vo", "null")
+    mpv_set_option_string(p, "pause", "yes")
+    mpv_set_option_string(p, "keep-open", "yes")
+    testing.expect(t, mpv_initialize(p) >= 0)
+    testing.expect(t, command(p, "loadfile", fixture))
+    loaded := false
+    for _ in 0 ..< 100 {
+        if mpv_wait_event(p, 0.05).id == 8 {loaded = true; break}
+    }
+    testing.expect(t, loaded)
+    if !loaded {return}
+    append(&lib.books, Book{duration = number(p, "duration")})
+    defer delete(lib.books)
+    active = 0
+    pending = false
+    saved_at = monotonic_time()
+    for target in ([3]f64{3, 0.5, 2.5}) {
+        queue_seek(target)
+        testing.expect(t, playback_position() == target)
+        finished := false
+        for _ in 0 ..< 100 {
+            tick()
+            testing.expect(t, abs(playback_position() - target) < 0.15)
+            if seek_target < 0 && seek_position < 0 {finished = true; break}
+            time.sleep(10 * time.Millisecond)
+        }
+        testing.expect(t, finished)
+    }
 }

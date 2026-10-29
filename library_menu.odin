@@ -1,91 +1,48 @@
 package abbott
 
+import "core:os"
 import "core:path/filepath"
-import "odin-gtk/glib"
-import "odin-gtk/glib/gio"
-import gobj "odin-gtk/glib/gobject"
-import "odin-gtk/gtk"
+import rl "vendor:raylib"
 
-book_menu: ^gtk.Popover
 menu_book := -1
+folder_process: os.Process
 
-setup_book_menu :: proc() {
-    book_menu = gtk.POPOVER(gtk.popover_new())
-    gtk.widget_set_parent(gtk.WIDGET(book_menu), gtk.WIDGET(library_list))
-    box := gtk.box_new(.VERTICAL, 4)
-    margin(box, 6)
-    gtk.popover_set_child(book_menu, box)
-    gobj.signal_connect(window, "close-request", on_library_menu_close)
-    add_button(gtk.BOX(box), "Show in folder", on_book_action)
-    remove := add_button(gtk.BOX(box), "Remove from library", on_book_action, rawptr(uintptr(1)))
-    gtk.widget_set_tooltip_text(gtk.WIDGET(remove), "Removes saved progress and bookmarks. Audio files are kept.")
-    gesture := gtk.gesture_click_new()
-    gtk.gesture_single_set_button(gtk.GESTURE_SINGLE(gesture), 3)
-    gobj.signal_connect(gesture, "pressed", on_book_menu)
-    gtk.widget_add_controller(gtk.WIDGET(library_list), gtk.EVENT_CONTROLLER(gesture))
+show_folder :: proc(path: string) {
+    args: []string
+    when ODIN_OS == .Windows {args = []string{"explorer.exe", path}} else {args = []string{"xdg-open", path}}
+    if folder_process.pid != 0 {return}
+    process, err := os.process_start({command = args})
+    if err != nil {status = "Could not open the folder"; return}
+    folder_process = process
 }
 
-on_book_menu :: proc "c" (gesture: ^gtk.GestureClick, _: i32, x, y: f64, _: rawptr) {
-    context = app_context
-    row := gtk.list_box_get_row_at_y(library_list, i32(y))
-    if row == nil {return}
-    menu_book = int(gtk.list_box_row_get_index(row))
-    gtk.list_box_select_row(library_list, row)
-    rect := gtk.Rectangle{i32(x), i32(y), 1, 1}
-    gtk.popover_set_pointing_to(book_menu, &rect)
-    gtk.popover_popup(book_menu)
-    gtk.gesture_set_state(gtk.GESTURE(gesture), .EVENT_SEQUENCE_CLAIMED)
-}
-
-on_book_action :: proc "c" (_: ^gtk.Button, action: rawptr) {
-    context = app_context
-    defer free_all(context.temp_allocator)
-    index := menu_book
-    menu_book = -1
-    gtk.popover_popdown(book_menu)
-    if index < 0 || index >= len(lib.books) {return}
-    if action == nil {
-        book := &lib.books[index]
-        file := gio.file_new_for_path(cstr(filepath.dir(book.files[book.track])))
-        defer gobj.object_unref(file)
-        uri := gio.file_get_uri(file)
-        defer glib.free(rawptr(uri))
-        gtk.show_uri(window, uri, 0)
-        return
+draw_book_menu :: proc(width, height: f32) {
+    x, y := width / 2 - 160, height / 2 - 75
+    panel({x, y, 320, 150}, "Library")
+    if icon_button(x + 16, y + 48, "\uf07c", "Show in folder") {
+        book := &lib.books[menu_book]
+        show_folder(filepath.dir(book.files[book.track]))
+        menu_book = -1
     }
-    if active == index {
-        command(p, "stop")
-        active = -1
-        pending = false
-        paused = true
-        seek_target = -1
-        sleep_at = 0
-        for ch in chapters {delete(ch.title)}
-        clear(&chapters)
-        updating = true
-        gtk.drop_down_set_model(chapter_picker, nil)
-        gtk.range_set_range(seek_bar, 0, 1)
-        gtk.range_set_value(seek_bar, 0)
-        updating = false
-        gtk.label_set_text(title_label, cstr(judy_quotes[glib.random_int_range(0, i32(len(judy_quotes)))]))
-        gtk.label_set_text(file_label, "Pick a book.")
-        gtk.label_set_text(time_label, "00:00:00 / 00:00:00")
-        gtk.label_set_text(global_label, "")
-        gtk.button_set_icon_name(play_button, "media-playback-start-symbolic")
-        gtk.widget_set_sensitive(player_box, false)
-    } else if active > index {
-        active -= 1
+    if icon_button(x + 66, y + 48, "\uf1f8", "Remove from library; keep audio files") {
+        index := menu_book
+        menu_book = -1
+        if active == index {
+            command(p, "stop")
+            active = -1
+            pending = false
+            paused = true
+            seek_target = -1
+            seek_position = -1
+            sleep_at = 0
+            for ch in chapters {delete(ch.title)}
+            clear(&chapters)
+        } else if active > index {active -= 1}
+        remove_book(&lib, index)
+        status = "Removed from library. Audio files kept."
+        save(&lib)
     }
-    remove_book(&lib, index)
-    status = "Removed from library. Audio files kept."
-    save(&lib)
-    refresh_library()
-    gtk.label_set_text(status_label, cstr(status))
+    label({x + 16, y + 105, 288, 24}, "Audio files are kept.")
+    if icon_button(x + 264, y + 48, "\uf00d", "Cancel") || rl.IsKeyPressed(.ESCAPE) {menu_book = -1}
 }
 
-on_library_menu_close :: proc "c" (_: ^gtk.Window, _: rawptr) -> glib.boolean {
-    context = app_context
-    gtk.widget_unparent(gtk.WIDGET(book_menu))
-    book_menu = nil
-    return false
-}
